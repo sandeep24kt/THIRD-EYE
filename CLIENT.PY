@@ -1,37 +1,39 @@
 import socket
 import mss
-import pickle
-import struct
+import mss.tools
+import time
+import io
+from PIL import Image
 
-# Set up server socket
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_socket.bind(('0.0.0.0', 9999))  # Listen on all available interfaces
-server_socket.listen(5)
+# Set up the server address and port
+server_ip = '127.0.0.1'  # Replace with the correct server IP address
+server_port = 12345
 
-print("Server is listening...")
+# Create a socket object
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.connect((server_ip, server_port))
 
-# Wait for a connection from a client
-client_socket, addr = server_socket.accept()
-print(f"Connection from {addr} has been established!")
-
+# Initialize MSS for capturing screenshots
 with mss.mss() as sct:
-    # Define the monitor to capture (you can customize the region)
-    monitor = sct.monitors[1]
-
+    # Capture screenshots in a loop
     while True:
-        # Capture the screen
-        img = sct.grab(monitor)
-
-        # Convert the image to bytes
-        img_bytes = img.rgb
-
-        # Serialize the image data
-        data = pickle.dumps(img_bytes)
-
-        # Send the size of the serialized data first
-        message_size = struct.pack("Q", len(data))
-        client_socket.sendall(message_size + data)
-
-# Close the connection
-client_socket.close()
-server_socket.close()
+        # Capture the entire screen
+        screenshot = sct.grab(sct.monitors[0])
+        
+        # Convert the screenshot to an Image object using PIL
+        img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
+        
+        # Save the image to a BytesIO object in PNG format
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format="PNG")
+        img_data = img_buffer.getvalue()
+        
+        # Send the screenshot size first
+        img_size = len(img_data)
+        sock.sendall(img_size.to_bytes(4, 'big'))
+        
+        # Send the screenshot data
+        sock.sendall(img_data)
+        
+        # Wait for a short period before capturing the next screenshot
+        time.sleep(1)
